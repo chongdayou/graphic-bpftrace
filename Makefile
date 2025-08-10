@@ -3,9 +3,9 @@ default:
 	$(MAKE) traceMultithread
 
 traceMultithread: cleanMultithreadMain buildMultithread
-	sudo bpftrace ./tracing/trace.bt \
+	sudo bpftrace -q ./tracing/trace.bt \
 	-c './build/multithreadMain text/HamletActISceneII.txt text/HamletActIISceneI.txt text/HamletActIIISceneI.txt text/HamletActIIISceneII.txt text/HamletActIVSceneV.txt' \
-	1> trace_results.txt
+	| tee trace_results.csv > /dev/null
 
 runAatMain: cleanAatMain buildAat
 	./build/aatMain

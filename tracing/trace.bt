@@ -15,7 +15,7 @@ tracepoint:sched:sched_process_exec
 	if (strcontains(str(args->filename), $program_name)) {
 		@main_pid = args->pid;
 		@start[args->pid] = nsecs;
-		printf("timestamp=%llu,tid=%d,true,tracepoint:sched:sched_process_exec,\n", @start[args->pid], args->pid);
+		printf("%llu,%d,true,tracepoint:sched:sched_process_exec,\n", @start[args->pid], args->pid);
 	}
 }
 
@@ -26,7 +26,7 @@ tracepoint:sched:sched_process_fork
 {
 	$pid = args->child_pid;
 	@start[$pid] = nsecs;
-	printf("timestamp=%llu,tid=%d,false,tracepoint:sched:sched_process_fork,\n", @start[$pid], $pid);
+	printf("%llu,%d,false,tracepoint:sched:sched_process_fork,\n", @start[$pid], $pid);
 }
 
 /* record exit() called by pthread_library */
@@ -39,8 +39,8 @@ tracepoint:sched:sched_process_exit
 	$lifetime_ms = $start ? $lifetime_ns / 1000000 : -1;
 	$lifetime_ms_remainder = $start ? ($lifetime_ns % 1000000) / 1000 : 0;
 	args->pid != @main_pid ?
-			printf("timestamp=%llu,tid=%d,false,tracepoint:sched:sched_process_exit,lifetime=%llu.%03llu\n", @end[args->pid], args->pid, $lifetime_ms, $lifetime_ms_remainder) :
-			printf("timestamp=%llu,tid=%d,true,tracepoint:sched:sched_process_exit,lifetime=%llu.%03llu\n", @end[args->pid], args->pid, $lifetime_ms, $lifetime_ms_remainder);
+			printf("%llu,%d,false,tracepoint:sched:sched_process_exit,lifetime=%llu.%03llu\n", @end[args->pid], args->pid, $lifetime_ms, $lifetime_ms_remainder) :
+			printf("%llu,%d,true,tracepoint:sched:sched_process_exit,lifetime=%llu.%03llu\n", @end[args->pid], args->pid, $lifetime_ms, $lifetime_ms_remainder);
 	delete(@start[args->pid]);
 	delete(@end[args->pid]);
 }
