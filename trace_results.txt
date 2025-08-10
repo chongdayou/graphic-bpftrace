@@ -1,0 +1,19 @@
+Attaching 5 probes...
+timestamp,tid,isMain,tracepoint,lifetime
+timestamp=15040548417538,tid=23758,true,tracepoint:sched:sched_process_exec,
+timestamp=15040549046268,tid=23759,false,tracepoint:sched:sched_process_fork,
+timestamp=15040549221371,tid=23760,false,tracepoint:sched:sched_process_fork,
+timestamp=15040549370613,tid=23761,false,tracepoint:sched:sched_process_fork,
+timestamp=15040549495698,tid=23762,false,tracepoint:sched:sched_process_fork,
+timestamp=15040549624008,tid=23763,false,tracepoint:sched:sched_process_fork,
+timestamp=15040561134486,tid=23759,false,tracepoint:sched:sched_process_exit,lifetime=12.088
+timestamp=15040569554473,tid=23762,false,tracepoint:sched:sched_process_exit,lifetime=20.058
+timestamp=15040569812949,tid=23760,false,tracepoint:sched:sched_process_exit,lifetime=20.591
+timestamp=15040570323420,tid=23763,false,tracepoint:sched:sched_process_exit,lifetime=20.699
+timestamp=15040571005241,tid=23761,false,tracepoint:sched:sched_process_exit,lifetime=21.634
+timestamp=15040577559547,tid=23758,true,tracepoint:sched:sched_process_exit,lifetime=29.142
+
+
+
+
+
