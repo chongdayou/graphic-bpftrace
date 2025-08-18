@@ -3,8 +3,8 @@ import csv
 def get_num_stats(line: list[str]) -> list[int]:
 	stats = []
 	word_mapping = {
-		'true': 0,
-		'false': 1,
+		'true': 1,
+		'false': 0,
 		'exec()': 0,
 		'fork()': 1,
 		'exit()': 2,
@@ -24,7 +24,7 @@ def get_num_stats(line: list[str]) -> list[int]:
 # list format: timestamp, tid, isMain, operation, stat1, stat2, stat3, stat4
 # operations: exec() marks the start of main thread, fork() marks start of child thread,
 # 		malloc(), realloc(), free()
-# ismain: 0 == True, 1 == False
+# ismain: 0 == False, 1 == True
 # represent operations by int:
 # 		exec() = 0, fork() = 1, exit() = 2, malloc() = 3, free() = 4, realloc() = 5
 # stats by operation:
