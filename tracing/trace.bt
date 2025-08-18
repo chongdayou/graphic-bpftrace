@@ -140,6 +140,7 @@ END {
 	clear(@ptrOwner);
 	clear(@oldPtr);
 	clear(@newSize);
+	clear(@heapProc);
 	clear(@start);
 	clear(@end);
 }
