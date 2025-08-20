@@ -5,6 +5,7 @@
 
 # Custom ignores
 build/
+.venv/
 
 # User-specific files
 *.rsuser

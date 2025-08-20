@@ -6,7 +6,6 @@ traceMultithread: cleanMultithreadMain buildMultithread
 	sudo bpftrace -q ./tracing/trace.bt \
 	-c './build/multithreadMain text/HamletActISceneII.txt text/HamletActIISceneI.txt text/HamletActIIISceneI.txt text/HamletActIIISceneII.txt text/HamletActIVSceneV.txt' \
 	| tee tracing/trace_results.csv > /dev/null
-	python3 ./tracing/trace_graphs.py
 
 runAatMain: cleanAatMain buildAat
 	./build/aatMain

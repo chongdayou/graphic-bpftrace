@@ -56,6 +56,7 @@ uretprobe:/lib/x86_64-linux-gnu/libc.so.6:malloc
 	printf("%llu,%d,%s,malloc(),%llu,%llu,%llu,\n", nsecs, tid, $isMain, @heapProc, @heapThread[tid], $size);
 }
 
+/*
 uprobe:/lib/x86_64-linux-gnu/libc.so.6:realloc
 /(uint64)pid == (uint64)@main_pid/
 {
@@ -63,7 +64,7 @@ uprobe:/lib/x86_64-linux-gnu/libc.so.6:realloc
 	@newSize[tid] = arg1;
 }
 
-/* custom_stat_1 == process heap size, custom_stat_2 == size thread heap, custom_stat_3 == old size, custom_stat_4 == new size */
+//custom_stat_1 == process heap size, custom_stat_2 == size thread heap, custom_stat_3 == old size, custom_stat_4 == new size
 uretprobe:/lib/x86_64-linux-gnu/libc.so.6:realloc
 /(uint64)pid == (uint64)@main_pid/
 {
@@ -92,6 +93,7 @@ uretprobe:/lib/x86_64-linux-gnu/libc.so.6:realloc
 		printf("%llu,%d,%s,realloc(),%llu,%llu,%llu,%llu\n", nsecs, tid, $isMain, @heapProc, @heapThread[tid], $oldSize, $size);
 	}
 }
+*/
 
 /* record size by free() */
 /* custom_stat_1 == process heap size, custom_stat_2 == size of thread heap, custom_stat_3 == size of current free() */
@@ -111,7 +113,7 @@ uprobe:/lib/x86_64-linux-gnu/libc.so.6:free
 		@heapProc -= (uint64)$size;
 	}
 	$isMain = tid == pid ? "true" : "false";
-	printf("%llu,%d,%s,free(),%llu,%llu,%llu,\n", nsecs, tid, $isMain, @heapProc, @heapThread[tid], $size);
+	printf("%llu,%d,%s,free(),%llu,%llu,%llu,\n", nsecs, $owner, $isMain, @heapProc, @heapThread[tid], $size);
 }
 
 
@@ -123,11 +125,9 @@ tracepoint:sched:sched_process_exit
 	$start = @start[args->pid];
 	@end[args->pid] = nsecs;
 	$lifetime_ns = $start ? (@end[args->pid] - $start) : 0;
-	$lifetime_ms = $start ? $lifetime_ns / 1000000 : 0;
-	$lifetime_ms_remainder = $start ? ($lifetime_ns % 1000000) / 1000 : 0;
 	args->pid != @main_pid ?
-			printf("%llu,%d,false,exit(),%llu.%03llu,,,\n", @end[args->pid], args->pid, $lifetime_ms, $lifetime_ms_remainder) :
-			printf("%llu,%d,true,exit(),%llu.%03llu,,,\n", @end[args->pid], args->pid, $lifetime_ms, $lifetime_ms_remainder);
+			printf("%llu,%d,false,exit(),%llu,,,\n", @end[args->pid], args->pid, $lifetime_ns) :
+			printf("%llu,%d,true,exit(),%llu,,,\n", @end[args->pid], args->pid, $lifetime_ns);
 	delete(@start[args->pid]);
 	delete(@end[args->pid]);
 }
@@ -138,8 +138,8 @@ END {
 	clear(@heapThread);
 	clear(@ptrSize);
 	clear(@ptrOwner);
-	clear(@oldPtr);
-	clear(@newSize);
+	//clear(@oldPtr);
+	//clear(@newSize);
 	clear(@heapProc);
 	clear(@start);
 	clear(@end);
