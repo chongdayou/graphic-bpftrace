@@ -1,6 +1,11 @@
 default:
 	mkdir -p build
-	$(MAKE) traceMultithread
+	$(MAKE) trace2Multithread
+
+trace2Multithread: cleanMultithreadMain buildMultithread
+	sudo bpftrace -q ./tracing/trace_no_owner.bt \
+	-c './build/multithreadMain text/HamletActISceneII.txt text/HamletActIISceneI.txt text/HamletActIIISceneI.txt text/HamletActIIISceneII.txt text/HamletActIVSceneV.txt' \
+	| tee tracing/trace_no_owner_results.csv > /dev/null
 
 traceMultithread: cleanMultithreadMain buildMultithread
 	sudo bpftrace -q ./tracing/trace.bt \

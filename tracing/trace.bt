@@ -12,8 +12,8 @@ BEGIN {
 tracepoint:sched:sched_process_exec
 /@main_pid == 0/
 {
-	$program_name = "multithreadMain";
-	if (strcontains(str(args->filename), $program_name)) {
+	@program_name = "multithreadMain";
+	if (strcontains(str(args->filename), @program_name)) {
 		@main_pid = args->pid;
 		@start[args->pid] = nsecs;
 		printf("%llu,%d,true,exec(),,,,\n", @start[args->pid], args->pid);
@@ -23,7 +23,7 @@ tracepoint:sched:sched_process_exec
 /* record fork() called by pthread_create */
 /* $target is the passed in PID */
 tracepoint:sched:sched_process_fork
-/@main_pid != 0 && args->parent_pid == @main_pid && args->child_pid != args->parent_pid/
+/@main_pid != 0 && comm == @program_name && args->child_pid != args->parent_pid/
 {
 	$pid = args->child_pid;
 	@start[$pid] = nsecs;
@@ -32,7 +32,7 @@ tracepoint:sched:sched_process_fork
 
 /* record size requested by malloc() at uprobe because this version of bpftrace does not support arg0 at uretprobe */
 uprobe:/lib/x86_64-linux-gnu/libc.so.6:malloc
-/(uint64)pid == (uint64)@main_pid/
+/comm == @program_name/
 {
 	@pendingSize[tid] = arg0;
 }
@@ -41,7 +41,7 @@ uprobe:/lib/x86_64-linux-gnu/libc.so.6:malloc
 /* custom_stat_1 == process heap size, custom_stat_2 == thread heap size, custom_stat_3 == size of current malloc() */
 /* pointers used for tracking size of free() */
 uretprobe:/lib/x86_64-linux-gnu/libc.so.6:malloc
-/(uint64)pid == (uint64)@main_pid/
+/comm == @program_name/
 {
 	$size = @pendingSize[tid];
 	delete(@pendingSize[tid]);
@@ -58,7 +58,7 @@ uretprobe:/lib/x86_64-linux-gnu/libc.so.6:malloc
 
 /*
 uprobe:/lib/x86_64-linux-gnu/libc.so.6:realloc
-/(uint64)pid == (uint64)@main_pid/
+/comm == @program_name/
 {
 	@oldPtr[tid] = arg0;
 	@newSize[tid] = arg1;
@@ -66,7 +66,7 @@ uprobe:/lib/x86_64-linux-gnu/libc.so.6:realloc
 
 //custom_stat_1 == process heap size, custom_stat_2 == size thread heap, custom_stat_3 == old size, custom_stat_4 == new size
 uretprobe:/lib/x86_64-linux-gnu/libc.so.6:realloc
-/(uint64)pid == (uint64)@main_pid/
+/comm == @program_name/
 {
 	$ptr = @oldPtr[tid];
 	$size = @newSize[tid];
@@ -98,7 +98,7 @@ uretprobe:/lib/x86_64-linux-gnu/libc.so.6:realloc
 /* record size by free() */
 /* custom_stat_1 == process heap size, custom_stat_2 == size of thread heap, custom_stat_3 == size of current free() */
 uprobe:/lib/x86_64-linux-gnu/libc.so.6:free
-/(uint64)pid == (uint64)@main_pid/
+/comm == @program_name/
 {
 	$size = @ptrSize[arg0];
 	$owner = @ptrOwner[arg0];
@@ -120,7 +120,7 @@ uprobe:/lib/x86_64-linux-gnu/libc.so.6:free
 /* record exit() called by pthread_library */
 /* custom_stat1 == lifetime of thread */
 tracepoint:sched:sched_process_exit
-/@main_pid != 0/
+/@main_pid != 0 && comm == @program_name/
 {
 	$start = @start[args->pid];
 	@end[args->pid] = nsecs;
@@ -134,6 +134,7 @@ tracepoint:sched:sched_process_exit
 
 END {
 	clear(@main_pid);
+	clear(@program_name);
 	clear(@pendingSize);
 	clear(@heapThread);
 	clear(@ptrSize);

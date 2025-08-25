@@ -1,0 +1,133 @@
+#!/usr/bin/env/ bpftrace
+
+/* csv columns: timestamp, tid, isMain, tracepoint, lifetime */
+
+BEGIN {
+	@main_pid = 0;
+	@heapProc = (uint64)0;
+	printf("timestamp,tid,isMain,tracepoint,custom_stat_1,custom_stat_2,custom_stat_3,custom_stat_4\n");
+}
+
+/* record exec() called by main thread, this is when the main thread starts */
+tracepoint:sched:sched_process_exec
+/@main_pid == 0/
+{
+	@program_name = "multithreadMain";
+	if (strcontains(str(args->filename), @program_name)) {
+		@main_pid = args->pid;
+		@start[args->pid] = nsecs;
+		printf("%llu,%d,true,exec(),,,,\n", @start[args->pid], args->pid);
+	}
+}
+
+/* record fork() called by pthread_create */
+/* $target is the passed in PID */
+tracepoint:sched:sched_process_fork
+/@main_pid != 0 && comm == @program_name && args->child_pid != args->parent_pid/
+{
+	$pid = args->child_pid;
+	@start[$pid] = nsecs;
+	printf("%llu,%d,false,fork(),,,,\n", @start[$pid], $pid);
+}
+
+/* record size requested by malloc() at uprobe because this version of bpftrace does not support arg0 at uretprobe */
+uprobe:/lib/x86_64-linux-gnu/libc.so.6:malloc
+/comm == @program_name/
+{
+	@pendingSize[tid] = arg0;
+}
+
+/* record size requested and pointer given by malloc() and current thread heap size */
+/* custom_stat_1 == process heap size, custom_stat_2 == thread heap size, custom_stat_3 == size of current malloc() */
+/* pointers used for tracking size of free() */
+uretprobe:/lib/x86_64-linux-gnu/libc.so.6:malloc
+/comm == @program_name/
+{
+	$size = @pendingSize[tid];
+	delete(@pendingSize[tid]);
+	
+	if ($size == 0 || retval == 0) {exit();}
+
+	@ptrSize[retval] = $size;
+	@heapThread[tid] += $size;
+	@heapProc += (uint64)$size;
+	$isMain = tid == pid ? "true" : "false";
+	printf("%llu,%d,%s,malloc(),%lld,%lld,%lld,\n", nsecs, tid, $isMain, (int64)@heapProc, (int64)@heapThread[tid], (int64)$size);
+}
+
+/*
+uprobe:/lib/x86_64-linux-gnu/libc.so.6:realloc
+/comm == @program_name/
+{
+	@oldPtr[tid] = arg0;
+	@newSize[tid] = arg1;
+}
+
+//custom_stat_1 == process heap size, custom_stat_2 == size thread heap, custom_stat_3 == old size, custom_stat_4 == new size
+uretprobe:/lib/x86_64-linux-gnu/libc.so.6:realloc
+/comm == @program_name/
+{
+	$ptr = @oldPtr[tid];
+	$size = @newSize[tid];
+	delete(@oldPtr[tid]);
+	delete(@newSize[tid]);
+
+	if (retval) {
+		$oldSize = @ptrSize[$ptr];
+		if ($oldSize) {
+			@heapThread[tid] -= $oldSize;
+			@heapProc -= (uint64)$oldSize;
+			delete(@ptrSize[$ptr]);
+		}
+		delete(ptrSize[$ptr]);
+		@ptrSize[retval] = $size;
+		@heapThread[tid] += $size;
+		@heapProc += (uint64)$size;
+
+		$isMain = tid == pid ? "true" : "false";
+		printf("%llu,%d,%s,realloc(),%lld,%lld,%lld,%lld\n", nsecs, tid, $isMain, (int64)@heapProc, (int64)@heapThread[tid], (int64)$oldSize, (int64)$size);
+	}
+}
+*/
+
+/* record size by free() */
+/* custom_stat_1 == process heap size, custom_stat_2 == size of thread heap, custom_stat_3 == size of current free() */
+uprobe:/lib/x86_64-linux-gnu/libc.so.6:free
+/comm == @program_name/
+{
+	$size = @ptrSize[arg0];
+	delete(@ptrSize[arg0]);
+	if ($size) {
+		@heapThread[tid] -= $size;
+		@heapProc -= (uint64)$size;
+	}
+	$isMain = tid == pid ? "true" : "false";
+	printf("%llu,%d,%s,free(),%lld,%lld,%lld,\n", nsecs, tid, $isMain, (int64)@heapProc, (int64)@heapThread[tid], (int64)$size);
+}
+
+
+/* record exit() called by pthread_library */
+/* custom_stat1 == lifetime of thread */
+tracepoint:sched:sched_process_exit
+/@main_pid != 0 && comm == @program_name/
+{
+	$start = @start[args->pid];
+	@end[args->pid] = nsecs;
+	$lifetime_ns = $start ? (@end[args->pid] - $start) : 0;
+	args->pid != @main_pid ?
+			printf("%llu,%d,false,exit(),%llu,,,\n", @end[args->pid], args->pid, $lifetime_ns) :
+			printf("%llu,%d,true,exit(),%llu,,,\n", @end[args->pid], args->pid, $lifetime_ns);
+	delete(@start[args->pid]);
+	delete(@end[args->pid]);
+}
+
+END {
+	clear(@main_pid);
+	clear(@program_name);
+	clear(@pendingSize);
+	clear(@heapThread);
+	clear(@ptrSize);
+	clear(@heapProc);
+	clear(@start);
+	clear(@end);
+}
