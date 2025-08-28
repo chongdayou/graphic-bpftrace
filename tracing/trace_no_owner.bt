@@ -2,11 +2,29 @@
 
 /* csv columns: timestamp, tid, isMain, tracepoint, lifetime */
 
+// -- global stuffs --
+
 BEGIN {
 	@main_pid = 0;
 	@heapProc = (uint64)0;
 	printf("timestamp,tid,isMain,tracepoint,custom_stat_1,custom_stat_2,custom_stat_3,custom_stat_4\n");
 }
+
+END {
+	clear(@main_pid);
+	clear(@program_name);
+	clear(@pendingSize);
+	clear(@heapThread);
+	clear(@ptrSize);
+	clear(@heapProc);
+	clear(@start);
+	clear(@end);
+
+	// pthread
+	clear(@threadCreation);
+}
+
+// -- scheduler system calls --
 
 /* record exec() called by main thread, this is when the main thread starts */
 tracepoint:sched:sched_process_exec
@@ -29,6 +47,23 @@ tracepoint:sched:sched_process_fork
 	@start[$pid] = nsecs;
 	printf("%llu,%d,false,fork(),,,,\n", @start[$pid], $pid);
 }
+
+/* record exit() called by pthread_library */
+/* custom_stat1 == lifetime of thread */
+tracepoint:sched:sched_process_exit
+/@main_pid != 0 && comm == @program_name/
+{
+	$start = @start[args->pid];
+	@end[args->pid] = nsecs;
+	$lifetime_ns = $start ? (@end[args->pid] - $start) : 0;
+	args->pid != @main_pid ?
+			printf("%llu,%d,false,exit(),%llu,,,\n", @end[args->pid], args->pid, $lifetime_ns) :
+			printf("%llu,%d,true,exit(),%llu,,,\n", @end[args->pid], args->pid, $lifetime_ns);
+	delete(@start[args->pid]);
+	delete(@end[args->pid]);
+}
+
+// -- libc memory calls --
 
 /* record size requested by malloc() at uprobe because this version of bpftrace does not support arg0 at uretprobe */
 uprobe:/lib/x86_64-linux-gnu/libc.so.6:malloc
@@ -99,35 +134,42 @@ uprobe:/lib/x86_64-linux-gnu/libc.so.6:free
 	delete(@ptrSize[arg0]);
 	if ($size) {
 		@heapThread[tid] -= $size;
-		@heapProc -= (uint64)$size;
 	}
 	$isMain = tid == pid ? "true" : "false";
+	if ($isMain) {
+		@heapProc -= (uint64)$size;
+	} else {
+		@heapThread[@main_pid] += $size;
+	}
 	printf("%llu,%d,%s,free(),%lld,%lld,%lld,\n", nsecs, tid, $isMain, (int64)@heapProc, (int64)@heapThread[tid], (int64)$size);
 }
 
+// -- libpthread --
+#define LIBPTHREAD "/lib/x86_64-linux-gnu/libpthread.so.0"
 
-/* record exit() called by pthread_library */
-/* custom_stat1 == lifetime of thread */
-tracepoint:sched:sched_process_exit
-/@main_pid != 0 && comm == @program_name/
+/*
+record timestamp when entering pthread_create()
+*/
+uprobe:LIBPTHREAD:"pthread_create"
+/comm == @program_name/
 {
-	$start = @start[args->pid];
-	@end[args->pid] = nsecs;
-	$lifetime_ns = $start ? (@end[args->pid] - $start) : 0;
-	args->pid != @main_pid ?
-			printf("%llu,%d,false,exit(),%llu,,,\n", @end[args->pid], args->pid, $lifetime_ns) :
-			printf("%llu,%d,true,exit(),%llu,,,\n", @end[args->pid], args->pid, $lifetime_ns);
-	delete(@start[args->pid]);
-	delete(@end[args->pid]);
+	@threadCreation[tid] = nsecs;
+	$isMain = tid == pid ? "true" : "false";
+	printf("%llu,%d,%s,ent:pthread_create(),,,,\n", nsecs, tid, $isMain);
 }
 
-END {
-	clear(@main_pid);
-	clear(@program_name);
-	clear(@pendingSize);
-	clear(@heapThread);
-	clear(@ptrSize);
-	clear(@heapProc);
-	clear(@start);
-	clear(@end);
+/*
+record timestamp when finishing pthread_create()
+custom_stat_1 = success thread creation or not
+custom_stat_2 = time spent in pthread_create() (ns)
+*/
+uretprobe:LIBPTHREAD:"pthread_create"
+/comm == @program_name/
+{
+	$t = nsecs;
+	$finish = $t;
+	$start = @threadCreation[tid]; delete(@threadCreation[tid]);
+	$isMain = tid == pid ? "true" : "false";
+	$success = retval ? "true" : "false";
+	printf("%llu,%d,%s,ret:pthread_create(),%s,%d,,\n", $t, tid, $isMain, $success, $finish - $start);
 }
